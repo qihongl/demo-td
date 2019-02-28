@@ -19,13 +19,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(style='white', context='talk', rc={"lines.linewidth": 2})
 
-# define the number of states
-n_states = 6
-# define the reward
-R = np.zeros(n_states)
-# the last state has the reward
-R[-1] = 1
-
 
 def run_agent(V, alpha=0.1):
     """let the model traverse through all states, and perform TD update
@@ -43,42 +36,64 @@ def run_agent(V, alpha=0.1):
         updated values
 
     """
-    # initial state
-    state = 0
-    while True:
-        old_state = state
-        # move to the right
-        state += 1
-        # TD update
-        V[old_state] += alpha * (R[state] + V[state] - V[old_state])
-        if state == n_states-1:
-            break
-    return V
+    td_error = np.zeros(n_states)
+    for t in range(n_states-1):
+        td_error[t] = R[t+1] + V[t+1] - V[t]
+        V[t] += alpha * td_error[t]
+    return V, td_error
 
+
+# define the number of states
+n_states = 10
+# define the reward
+R = np.zeros(n_states)
+# the last t+1 has the reward
+R[-1] = 1
+
+# train the model
+max_epochs = 2**8+1
+value_log = np.zeros((max_epochs, n_states))
+error_log = np.zeros((max_epochs, n_states))
+#
+V = np.zeros(n_states)
+for i in range(max_epochs):
+    value_log[i, :], error_log[i, :] = run_agent(V)
+
+
+"""
+show results
+"""
+
+
+def plot_helper(data_log, ax):
+    for i, epoch_id in enumerate(episodes_to_plot):
+        ax.plot(
+            range(n_states-1), data_log[epoch_id, :-1],
+            color=col_pal[i]
+        )
+    ax.set_xlabel('States')
+    ax.set_xticks(range(n_states))
+    xticklabels = [i for i in range(n_states)]
+    xticklabels[-1] = f'{n_states-1}\nReward'
+    ax.set_xticklabels(xticklabels)
+
+
+# organize the results
+episodes_to_plot = [0] + [2**k for k in np.arange(0, 9, 1)]
+col_pal = sns.color_palette('Blues', n_colors=len(episodes_to_plot))
+
+data = [value_log, error_log]
+titles = ['Value estimates over training', 'TD error over training']
+ylabels = ['Estimated t+1 value', 'TD error']
 
 # plot the results
-f, ax = plt.subplots(1, 1, figsize=(7, 4))
+f, axes = plt.subplots(2, 1, figsize=(7, 8))
+for i, ax in enumerate(axes):
+    plot_helper(data[i], ax)
+    ax.set_title(titles[i])
+    ax.set_ylabel(ylabels[i])
 
-episodes_to_plot = [0] + [2**k for k in np.arange(0, 10, 2)]
-col_pal = sns.color_palette('Blues', n_colors=len(episodes_to_plot))
-current_values = np.zeros(n_states)
-j = 0
-for i in range(episodes_to_plot[-1] + 1):
-    if i in episodes_to_plot:
-        ax.plot(
-            range(n_states-1), current_values[:-1],
-            label=f'epoch {i}', color=col_pal[j])
-        j += 1
-    run_agent(current_values)
-
-
-ax.set_xlabel('States')
-ax.set_xticks(range(n_states))
-xticklabels = [i for i in range(n_states)]
-xticklabels[-1] = f'{n_states-1}\nReward'
-ax.set_xticklabels(xticklabels)
-ax.set_title('Value estimates over training')
-ax.set_ylabel('Estimated state value')
-f.legend(frameon=False, bbox_to_anchor=(1.3, .8))
+f.legend([f'epoch {epoch_id}' for epoch_id in episodes_to_plot],
+         frameon=False, bbox_to_anchor=(1.3, .9))
 f.tight_layout()
 sns.despine()
